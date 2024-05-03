@@ -1,0 +1,3 @@
+[submodule "tree-sitter-dbspec"]
+	path = tree-sitter-dbspec
+	url = git@github.com:immortalvm/tree-sitter-dbspec.git

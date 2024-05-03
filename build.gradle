@@ -1,0 +1,282 @@
+import org.gradle.nativeplatform.platform.internal.DefaultNativePlatform
+
+plugins {
+    alias(libs.plugins.download)
+    id 'java'
+    id 'java-library'
+    id 'maven-publish'
+}
+
+group = 'no.nr'
+version = '1.0'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'io.github.bonede:tree-sitter:0.22.5a'
+    testImplementation(platform(libs.junit.bom))
+    testImplementation('org.junit.jupiter:junit-jupiter')
+    // https://stackoverflow.com/a/77605392
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+}
+
+test {
+    useJUnitPlatform()
+}
+
+def libName = "tree-sitter-ng-dbspec"
+
+java {
+    withJavadocJar()
+    withSourcesJar()
+}
+
+processResources {
+    dependsOn("buildNative")
+}
+
+sourcesJar {
+    // Native binaries are not source files
+    exclude("lib")
+}
+
+publishing {
+    repositories {
+        maven {
+            name = "GitHubPackages"
+            url = "https://maven.pkg.github.com/immortalvm/tree-sitter-ng-dbspec"
+            credentials {
+                username = System.getenv("GITHUB_ACTOR")
+                password = System.getenv("GITHUB_TOKEN")
+            }
+        }
+    }
+    publications {
+        // IntelliJ warnings can be ignored:
+        // https://youtrack.jetbrains.com/issue/IDEA-338343/Publishing-DSL-has-various-IDE-warnings-and-errors-with-Groovy-DSL
+        maven(MavenPublication) {
+            from components.java
+            pom {
+                name = libName
+                url = "https://github.com/immortalvm/tree-sitter-ng-dbspec"
+                description = "DbSpec parser bindings"
+                licenses {
+                    license {
+                        name = "MIT"
+                    }
+                }
+                scm {
+                    connection = "scm:git:https://github.com/immortalvm/tree-sitter-ng-dbspec.git"
+                    developerConnection = "scm:git:https://github.com/immortalvm/tree-sitter-ng-dbspec.git"
+                    url = "https://github.com/immortalvm/tree-sitter-ng-dbspec"
+                }
+            }
+        }
+    }
+}
+
+
+// The rest of this file is taken from https://github.com/bonede/tree-sitter-ng with some adjustments.
+
+// MiniSign Release: https://jedisct1.github.io/minisign/
+tasks.register("downloadMiniSign") {
+    group = "build setup"
+    description = "Download Minisign signature tool required by Zig"
+
+    def os = DefaultNativePlatform.currentOperatingSystem
+    def miniSignDir = layout.buildDirectory.dir("mini-sign").get()
+
+    String miniSignUrl
+    RegularFile miniSignZip
+    RegularFile miniSignExe
+    if (os.windows) {
+        miniSignUrl = "https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-win64.zip"
+        miniSignZip = miniSignDir.file("minisign-0.11-win64.zip")
+        miniSignExe = miniSignDir.file("minisign-win64/minisign.exe")
+    } else if (os.macOsX) {
+        miniSignUrl = "https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-macos.zip"
+        miniSignZip = miniSignDir.file("minisign-0.11-macos.zip")
+        miniSignExe = miniSignDir.file("minisign")
+    } else if (os.linux) {
+        miniSignUrl = "https://github.com/jedisct1/minisign/releases/download/0.11/minisign-0.11-linux.tar.gz"
+        miniSignZip = miniSignDir.file("minisign-0.11-linux.tar.gz")
+        miniSignExe = miniSignDir.file("minisign-linux/x86_64/minisign")
+    } else {
+        throw new GradleException("Download miniSig error: Unsupported OS: " + System.getProperty("os.name"))
+    }
+    inputs.files(layout.projectDirectory.file("gradle.properties"))
+    outputs.files(miniSignExe)
+    ext.miniSignExe = miniSignExe
+    doLast {
+        miniSignDir.asFile.mkdirs()
+        download.run {
+            src miniSignUrl
+            dest miniSignZip
+            overwrite false
+        }
+        copy {
+            if (miniSignZip.asFile.name.endsWith("zip")) {
+                from zipTree(miniSignZip)
+            } else if (miniSignZip.asFile.name.endsWith("tar.gz")) {
+                from tarTree(miniSignZip)
+            }
+            into miniSignDir
+        }
+    }
+}
+
+// Zig Release: https://ziglang.org/download/
+tasks.register('downloadZig') {
+    group = "build setup"
+    description = "Download Zig compiler"
+    dependsOn "downloadMiniSign"
+    def os = DefaultNativePlatform.currentOperatingSystem
+    def arch = DefaultNativePlatform.currentArchitecture
+    def zigDir = layout.buildDirectory.dir("zig").get()
+    String osName
+    String archName
+    RegularFile zigExe
+    if (arch.amd64) {
+        archName = "x86_64"
+    } else if(arch.arm64) {
+        archName = "aarch64"
+    } else {
+        throw new GradleException("Boostrap error: Unsupported supported build host arch: " + System.getProperty("os.arch"))
+    }
+    if (os.windows) {
+        osName = "windows"
+        zigExe =  zigDir.file("zig-$osName-$archName-${zigVersion}/zig.exe")
+    } else if(os.macOsX) {
+        osName = "macos"
+        zigExe = zigDir.file("zig-$osName-$archName-${zigVersion}/zig")
+    } else if(os.linux) {
+        osName = "linux"
+        zigExe =  zigDir.file("zig-$osName-$archName-${zigVersion}/zig")
+    } else {
+        throw new GradleException("Boostrap error: Unsupported build host OS: " + System.getProperty("os.name"))
+    }
+    def zigZip =zigDir.file("zig-$osName-$archName-${zigVersion}.zip")
+    def zigSignature = zigDir.file("zig-$osName-$archName-${zigVersion}.zip.minisig")
+    def zigZipUrl = "https://ziglang.org/download/$zigVersion/zig-$osName-$archName-${zigVersion}.zip"
+    def signatureUrl = "${zigZipUrl}.minisig"
+    inputs.files(layout.projectDirectory.file("gradle.properties"))
+    outputs.files(zigSignature, zigExe)
+    ext.zigExe = zigExe
+    doLast {
+        def miniSignExe = downloadMiniSign.miniSignExe
+        mkdir(zigDir)
+        download.run {
+            src zigZipUrl
+            dest zigZip
+            overwrite false
+        }
+        download.run {
+            src signatureUrl
+            dest zigSignature
+            overwrite false
+        }
+        def zipVerified = exec {
+            ignoreExitValue true
+            workingDir zigDir
+            commandLine miniSignExe, "-qVm", zigZip, "-P", zigPubKey
+        }
+        if(!zipVerified) {
+            throw new GradleException("Boostrap error: $zigZip signature does not match!")
+        }
+        copy {
+            from zipTree(zigZip)
+            into zigDir
+        }
+    }
+}
+
+tasks.register("bootstrap") {
+    group = "build setup"
+    description = "Bootstrap JNI cross compiling environment"
+    dependsOn "downloadZig"
+}
+
+static String libExt(String target){
+    if(target.contains("windows")){
+        return "dll"
+    }else if(target.contains("linux")){
+        return "so"
+    }else if(target.contains("macos")){
+        return "dylib"
+    }else{
+        throw new GradleException("Does not support $target")
+    }
+}
+
+static String jniMdInclude(String target) {
+    if (target.contains("windows")) {
+        return "win32"
+    } else if (target.contains("linux")) {
+        return "linux"
+    } else if (target.contains("macos")) {
+        return "darwin"
+    } else {
+        throw new GradleException("Does not support $target")
+    }
+}
+
+tasks.register("buildNative") {
+    group = "build"
+    description = "Build parser native modules"
+    dependsOn("bootstrap")
+
+    def pd = layout.projectDirectory
+    def jniSrcDir = pd.dir("src/main/c")
+    def jniOutDir = pd.dir("src/main/resources/lib")
+    def jniCFile = jniSrcDir.file("no_nr_TreeSitterDbspec.c")
+    def libSrcDir = pd.dir("tree-sitter-dbspec/src")
+    def jniInclude = pd.dir("include/jni")
+
+    def srcFiles = fileTree(libSrcDir) {
+        include("parser.c")
+        include("scanner.cc")
+    }.toList()
+    inputs.files(srcFiles)
+    inputs.file(jniCFile)
+    inputs.file(pd.file("gradle.properties"))
+
+    def targets = ["x86_64-windows", "x86_64-macos", "x86_64-linux-gnu", "aarch64-linux-gnu", "aarch64-macos"]
+    def outputFiles = targets.collect() { t ->
+        String ext = libExt(t)
+        jniOutDir.file("$t-$libName.$ext")
+    }
+    outputs.files(outputFiles)
+
+    doLast {
+        mkdir(jniOutDir)
+        // This is a standard way to "zip" two lists in using Groovy.
+        [targets, outputFiles].transpose().each { String target, RegularFile jniOutFile ->
+            def cmd = [
+                    downloadZig.zigExe,
+                    "c++",
+                    "-g0",
+                    "-shared",
+                    "-target", target,
+                    "-I", libSrcDir,
+                    "-I", jniInclude,
+                    "-I", jniInclude.dir(jniMdInclude(target)),
+                    "-o", jniOutFile,
+                    jniCFile,
+            ]
+            cmd.addAll(srcFiles) // files
+            exec {
+                workingDir(jniSrcDir)
+                commandLine(cmd)
+            }
+        }
+
+        // Remove Windows debug files
+        def files = fileTree(jniOutDir) {
+            include("**/*.pdb")
+            include("**/*.lib")
+        }
+        delete(files)
+    }
+}

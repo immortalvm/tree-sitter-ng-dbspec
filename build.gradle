@@ -192,10 +192,8 @@ tasks.register('downloadZig') {
     }
 }
 
-tasks.register("bootstrap") {
-    group = "build setup"
-    description = "Bootstrap JNI cross compiling environment"
-    dependsOn "downloadZig"
+clean.doFirst {
+    downloadZig.ext.zigExe = DefaultNativePlatform.currentOperatingSystem.windows ? "zig.exe" : "zig"
 }
 
 static String libExt(String target){
@@ -225,7 +223,7 @@ static String jniMdInclude(String target) {
 tasks.register("buildNative") {
     group = "build"
     description = "Build parser native modules"
-    dependsOn("bootstrap")
+    dependsOn("downloadZig")
 
     def pd = layout.projectDirectory
     def jniSrcDir = pd.dir("src/main/c")
@@ -265,7 +263,7 @@ tasks.register("buildNative") {
                     "-o", jniOutFile,
                     jniCFile,
             ]
-            cmd.addAll(srcFiles) // files
+            cmd.addAll(srcFiles)
             exec {
                 workingDir(jniSrcDir)
                 commandLine(cmd)

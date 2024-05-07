@@ -255,6 +255,7 @@ tasks.register("buildNative") {
                     downloadZig.zigExe,
                     "c++",
                     "-g0",
+                    "-Wno-dll-attribute-on-redeclaration",
                     "-shared",
                     "-target", target,
                     "-I", libSrcDir,

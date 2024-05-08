@@ -34,12 +34,12 @@ jobs:
       uses: gradle/actions/setup-gradle@v3
 
     - name: Build with Gradle
-      run: ./gradlew clean build -x downloadZig -x test
+      run: ./gradlew clean build -x downloadZig
 
     # The USERNAME and TOKEN need to correspond to the credentials environment variables used in
     # the publishing section of your build.gradle
     - name: Publish to GitHub Packages
-      run: ./gradlew publish -x downloadZig -x test
+      run: ./gradlew publish -x downloadZig
       env:
         GITHUB_ACTOR: ${{ github.actor }}
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -8,7 +8,7 @@ import org.treesitter.utils.NativeUtils;
  */
 public class TreeSitterDbspec implements TSLanguage {
     static {
-        NativeUtils.loadLib("lib/tree-sitter-dbspec");
+        NativeUtils.loadLib("lib/tree-sitter-ng-dbspec");
     }
 
     private native static long tree_sitter_dbspec();

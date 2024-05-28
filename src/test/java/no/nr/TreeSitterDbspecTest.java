@@ -14,14 +14,12 @@ class TreeSitterDbspecTest {
         TSParser parser = new TSParser();
         TSLanguage dbspec = new TreeSitterDbspec();
         parser.setLanguage(dbspec);
-        TSTree tree = parser.parseString(null, """
-                Parameters:
-                	host - Hostname of database instance used for staging
-                	port - Port of database instance
-
-                # Name of the staging database
-                Set db = "adventure"
-                """);
+        TSTree tree = parser.parseString(null, "Parameters:\n" +
+                                               "	host - Hostname of database instance used for staging\n" +
+                                               "	port - Port of database instance\n" +
+                                               "\n" +
+                                               "# Name of the staging database\n" +
+                                               "Set db = \"adventure\"\n");
         TSNode rootNode = tree.getRootNode();
         assertEquals(2, rootNode.getChildCount());
 

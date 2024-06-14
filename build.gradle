@@ -115,7 +115,7 @@ tasks.register("buildNative") {
 
     def srcFiles = fileTree(libSrcDir) {
         include("parser.c")
-        include("scanner.cc")
+        include("scanner.c")
     }.toList()
     inputs.files(srcFiles)
     inputs.file(jniCFile)

@@ -75,6 +75,9 @@ publishing {
     }
 }
 
+tasks.withType(JavaCompile) {
+    options.release.set(11)
+}
 
 // The rest of this file is taken from https://github.com/bonede/tree-sitter-ng with some adjustments.
 
